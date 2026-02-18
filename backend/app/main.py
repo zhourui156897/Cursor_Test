@@ -97,6 +97,7 @@ from app.api import search as search_router
 from app.api import graph as graph_router
 from app.api import chat as chat_router
 from app.api import history as history_router
+from app.api import settings_api as settings_router
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["认证"])
 app.include_router(tags_router.router, prefix="/api/tags", tags=["标签"])
@@ -108,3 +109,4 @@ app.include_router(search_router.router, prefix="/api/search", tags=["搜索"])
 app.include_router(graph_router.router, prefix="/api/graph", tags=["图谱"])
 app.include_router(chat_router.router, prefix="/api/chat", tags=["对话"])
 app.include_router(history_router.router, prefix="/api/history", tags=["历史"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["设置"])

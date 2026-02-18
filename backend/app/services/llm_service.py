@@ -7,12 +7,25 @@ from typing import Any
 
 import httpx
 
-from app.config import get_settings
+from app.config import get_settings, get_user_config
 
 logger = logging.getLogger(__name__)
 
 _http_client: httpx.AsyncClient | None = None
 _llm_available: bool | None = None
+
+
+def _get_api_key() -> str:
+    """Get API key from user_config (set via Settings UI), fallback to empty."""
+    cfg = get_user_config()
+    return cfg.get("llm", {}).get("api_key", "") if cfg else ""
+
+
+def _auth_headers() -> dict[str, str]:
+    key = _get_api_key()
+    if key:
+        return {"Authorization": f"Bearer {key}"}
+    return {}
 
 
 async def _get_client() -> httpx.AsyncClient:
@@ -32,12 +45,16 @@ async def close_client():
 
 
 async def check_available() -> bool:
-    """Quick check if the LLM API is reachable. Caches result for 60s."""
+    """Quick check if the LLM API is reachable."""
     global _llm_available
     settings = get_settings()
     client = await _get_client()
     try:
-        resp = await client.get(f"{settings.llm_api_url.rstrip('/')}/models", timeout=3.0)
+        resp = await client.get(
+            f"{settings.llm_api_url.rstrip('/')}/models",
+            headers=_auth_headers(),
+            timeout=3.0,
+        )
         _llm_available = resp.status_code == 200
     except Exception:
         _llm_available = False
@@ -67,7 +84,7 @@ async def chat_completion(
         payload["response_format"] = response_format
 
     try:
-        resp = await client.post(url, json=payload)
+        resp = await client.post(url, json=payload, headers=_auth_headers())
         resp.raise_for_status()
         data = resp.json()
         return data["choices"][0]["message"]["content"]
@@ -89,7 +106,7 @@ async def get_embedding(text: str, *, model: str | None = None) -> list[float]:
         resp = await client.post(url, json={
             "model": model or settings.embedding_model,
             "input": text,
-        })
+        }, headers=_auth_headers())
         resp.raise_for_status()
         data = resp.json()
         return data["data"][0]["embedding"]
@@ -111,7 +128,7 @@ async def get_embeddings_batch(texts: list[str], *, model: str | None = None) ->
         resp = await client.post(url, json={
             "model": model or settings.embedding_model,
             "input": texts,
-        })
+        }, headers=_auth_headers())
         resp.raise_for_status()
         data = resp.json()
         sorted_data = sorted(data["data"], key=lambda x: x["index"])

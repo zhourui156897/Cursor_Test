@@ -128,13 +128,13 @@ export const graphApi = {
 
 // Chat
 export const chatApi = {
-  send: (message: string, conversationId?: string) =>
-    api.post<ChatResponse>('/chat/send', { message, conversation_id: conversationId }),
-  sendStream: (message: string, conversationId?: string) =>
+  send: (message: string, conversationId?: string, mode: string = 'rag') =>
+    api.post<ChatResponse>('/chat/send', { message, conversation_id: conversationId, mode }),
+  sendStream: (message: string, conversationId?: string, mode: string = 'rag') =>
     fetch(`${BASE}/chat/send/stream`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ message, conversation_id: conversationId, stream: true }),
+      body: JSON.stringify({ message, conversation_id: conversationId, stream: true, mode }),
     }),
   listConversations: (limit = 50) => api.get<Conversation[]>(`/chat/conversations?limit=${limit}`),
   getMessages: (id: string) => api.get<ChatMessage[]>(`/chat/conversations/${id}/messages`),
@@ -151,7 +151,61 @@ export const historyApi = {
   timeline: (entityId: string) => api.get<TimelineItem[]>(`/history/${entityId}/timeline`),
 };
 
+// Settings
+export const settingsApi = {
+  getLLM: () => api.get<LLMConfigResponse>('/settings/llm'),
+  updateLLM: (data: LLMConfigUpdate) => api.put<{ message: string }>('/settings/llm', data),
+  getPaths: () => api.get<PathsConfigResponse>('/settings/paths'),
+  updatePaths: (data: PathsConfigUpdate) => api.put<{ message: string }>('/settings/paths', data),
+  getSystemInfo: () => api.get<SystemInfo>('/settings/system-info'),
+};
+
 // Types
+export interface LLMConfigResponse {
+  api_url: string;
+  api_key_masked: string;
+  has_api_key: boolean;
+  model: string;
+  embedding_model: string;
+  embedding_dim: number;
+  status: 'connected' | 'disconnected';
+}
+export interface LLMConfigUpdate {
+  api_url?: string;
+  api_key?: string;
+  model?: string;
+  embedding_model?: string;
+  embedding_dim?: number;
+}
+export interface PathsConfigResponse {
+  obsidian_vault_path: string;
+  data_dir: string;
+  resolved_vault_path: string;
+  resolved_data_dir: string;
+}
+export interface PathsConfigUpdate {
+  obsidian_vault_path?: string;
+  data_dir?: string;
+}
+export interface SystemInfo {
+  version: string;
+  phase: string;
+  auth_mode: string;
+  vector_db_mode: string;
+  services: {
+    llm: { status: string; url: string };
+    milvus: Record<string, unknown>;
+    neo4j: Record<string, unknown>;
+  };
+  data: {
+    entities: number;
+    pending_reviews: number;
+    conversations: number;
+    milvus_vectors: number;
+    neo4j_nodes: number;
+  };
+}
+
 export interface SearchResponse {
   query: string;
   results: SearchResult[];
@@ -170,7 +224,7 @@ export interface GraphStats { available: boolean; node_count: number; relationsh
 export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[] }
 export interface GraphNode { id: string; title: string; source: string; labels: string[] }
 export interface GraphEdge { source: string; target: string; type: string }
-export interface ChatResponse { conversation_id: string; answer: string; sources: ChatSource[] }
+export interface ChatResponse { conversation_id: string; answer: string; sources: ChatSource[]; tool_calls?: Record<string, unknown>[] }
 export interface ChatSource { index: number; entity_id: string; title: string; source: string }
 export interface Conversation { id: string; title: string; created_at: string; updated_at: string; summary: string | null }
 export interface ChatMessage { id: string; role: string; content: string; sources: ChatSource[] | null; created_at: string }

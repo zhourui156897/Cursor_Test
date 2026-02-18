@@ -1,11 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, MessageSquare, Plus, Trash2, FileText } from 'lucide-react';
-import { chatApi, type ChatResponse, type Conversation, type ChatMessage } from '../api/client';
+import { Send, MessageSquare, Plus, Trash2, FileText, Bot, BookOpen, Wrench } from 'lucide-react';
+import { chatApi, type ChatResponse, type Conversation } from '../api/client';
+
+type ChatMode = 'rag' | 'agent';
+
+interface ToolCall {
+  tool: string;
+  arguments: Record<string, unknown>;
+  result_preview?: string;
+}
 
 interface DisplayMessage {
   role: string;
   content: string;
   sources?: { index: number; entity_id: string; title: string; source: string }[];
+  toolCalls?: ToolCall[];
 }
 
 export default function Chat() {
@@ -14,6 +23,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<ChatMode>('rag');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadConversations(); }, []);
@@ -62,12 +72,13 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const resp: ChatResponse = await chatApi.send(userMsg, activeConvId || undefined);
+      const resp: ChatResponse = await chatApi.send(userMsg, activeConvId || undefined, mode);
       if (!activeConvId) setActiveConvId(resp.conversation_id);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: resp.answer,
         sources: resp.sources,
+        toolCalls: resp.tool_calls as ToolCall[],
       }]);
       loadConversations();
     } catch (e: unknown) {
@@ -111,17 +122,79 @@ export default function Chat() {
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
+        {/* Mode Selector */}
+        <div className="border-b px-6 py-2 flex items-center gap-4">
+          <span className="text-xs text-gray-500">模式:</span>
+          <button
+            onClick={() => setMode('rag')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              mode === 'rag' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" /> RAG 问答
+          </button>
+          <button
+            onClick={() => setMode('agent')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              mode === 'agent' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" /> Agent 智能体
+          </button>
+          <span className="text-xs text-gray-400 ml-2">
+            {mode === 'rag' ? '基于知识库检索回答' : '自主调用工具完成复杂任务'}
+          </span>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <MessageSquare className="w-16 h-16 mb-4" />
-              <h2 className="text-xl font-semibold mb-2">第二大脑问答</h2>
-              <p className="text-sm">基于你的知识库进行语义检索和智能回答</p>
+              {mode === 'rag' ? (
+                <>
+                  <BookOpen className="w-16 h-16 mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">RAG 知识问答</h2>
+                  <p className="text-sm">基于你的知识库进行语义检索和智能回答</p>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-16 h-16 mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Agent 智能体</h2>
+                  <p className="text-sm mb-4">可以搜索、创建笔记、打标签、查图谱、生成摘要</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      '帮我搜索关于投资的笔记',
+                      '知识库有多少条数据？',
+                      '总结一下我最近的待办事项',
+                      '创建一条关于会议纪要的笔记',
+                    ].map((hint, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setInput(hint)}
+                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 text-left"
+                      >
+                        {hint}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                {/* Tool calls */}
+                {m.toolCalls && m.toolCalls.length > 0 && (
+                  <div className="mb-3 space-y-1.5">
+                    {m.toolCalls.map((tc, j) => (
+                      <div key={j} className="flex items-center gap-1.5 text-xs bg-purple-50 text-purple-700 px-2.5 py-1.5 rounded-lg">
+                        <Wrench className="w-3 h-3" />
+                        <span className="font-medium">{tc.tool}</span>
+                        <span className="text-purple-400">({Object.values(tc.arguments).join(', ')})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="whitespace-pre-wrap text-sm">{m.content}</div>
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-3 pt-2 border-t border-gray-200 space-y-1">
@@ -141,10 +214,15 @@ export default function Chat() {
           {loading && (
             <div className="flex justify-start">
               <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {mode === 'agent' ? 'Agent 正在思考和调用工具...' : '正在检索和生成回答...'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -159,14 +237,16 @@ export default function Chat() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-              placeholder="向第二大脑提问..."
+              placeholder={mode === 'agent' ? '让 Agent 帮你完成任务...' : '向第二大脑提问...'}
               className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
             />
             <button
               onClick={sendMessage}
               disabled={loading || !input.trim()}
-              className="px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
+              className={`px-5 py-3 text-white rounded-xl disabled:opacity-50 ${
+                mode === 'agent' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               <Send className="w-5 h-5" />
             </button>

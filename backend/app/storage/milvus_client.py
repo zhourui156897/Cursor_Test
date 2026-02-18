@@ -137,13 +137,14 @@ async def delete_vector(entity_id: str) -> None:
 
 
 async def get_collection_stats() -> dict:
-    """Get collection statistics."""
-    client = await get_milvus()
+    """Get collection statistics. Returns quickly if client is not initialized."""
+    if _client is None:
+        return {"status": "unavailable", "collection": COLLECTION_NAME}
     try:
-        stats = client.get_collection_stats(COLLECTION_NAME)
-        return {"collection": COLLECTION_NAME, "stats": stats}
+        stats = _client.get_collection_stats(COLLECTION_NAME)
+        return {"status": "ok", "collection": COLLECTION_NAME, "stats": stats}
     except Exception as e:
-        return {"collection": COLLECTION_NAME, "error": str(e)}
+        return {"status": "error", "collection": COLLECTION_NAME, "error": str(e)}
 
 
 async def close_milvus():

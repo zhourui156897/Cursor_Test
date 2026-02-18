@@ -64,7 +64,37 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    _apply_user_overrides(settings)
+    return settings
+
+
+def _apply_user_overrides(settings: Settings):
+    """Apply user_config.yaml llm/paths overrides onto Settings."""
+    cfg_path = _project_root() / "backend" / "config" / "user_config.yaml"
+    if not cfg_path.exists():
+        return
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        return
+
+    llm = data.get("llm", {})
+    if llm.get("api_url"):
+        settings.llm_api_url = llm["api_url"]
+    if llm.get("model"):
+        settings.llm_model = llm["model"]
+    if llm.get("embedding_model"):
+        settings.embedding_model = llm["embedding_model"]
+    if llm.get("embedding_dim"):
+        settings.embedding_dim = llm["embedding_dim"]
+
+    paths = data.get("paths", {})
+    if paths.get("obsidian_vault_path"):
+        settings.obsidian_vault_path = paths["obsidian_vault_path"]
+    if paths.get("data_dir"):
+        settings.data_dir = paths["data_dir"]
 
 
 class UserConfig:
