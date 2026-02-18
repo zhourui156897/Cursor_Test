@@ -1,0 +1,9 @@
+{
+  "id": "dierdanao-second-brain",
+  "name": "第二大脑 - dierdanao",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "连接第二大脑后端：审核标签、语义搜索、知识图谱对话、双向同步",
+  "author": "dierdanao",
+  "isDesktopOnly": true
+}

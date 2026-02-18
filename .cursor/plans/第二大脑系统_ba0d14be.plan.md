@@ -28,13 +28,13 @@ todos:
     status: completed
   - id: phase3-search
     content: "Phase 3: 语义搜索 + 知识图谱查询 + 可视化"
-    status: pending
+    status: completed
   - id: phase3-auto-tag
-    content: "Phase 3: LLM 自动标签建议 + Dashboard 前端页面"
-    status: pending
+    content: "Phase 3: RAG问答 + 多轮对话 + 版本历史"
+    status: completed
   - id: phase4-obsidian
     content: "Phase 4: Obsidian 插件开发 + 双向同步"
-    status: pending
+    status: completed
 isProject: false
 ---
 
