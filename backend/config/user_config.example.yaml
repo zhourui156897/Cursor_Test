@@ -1,0 +1,111 @@
+# ============================================
+# 第二大脑 - 用户配置文件
+# 复制为 user_config.yaml 后根据需要调整
+# cp user_config.example.yaml user_config.yaml
+# ============================================
+
+# --- Obsidian ---
+obsidian:
+  sync_interval_minutes: 10
+
+# --- 树形结构标签（对应 Obsidian 文件夹） ---
+folder_tree:
+  - name: 归档
+    icon: "📦"
+    children:
+      - name: 历史资料
+      - name: 每周复盘
+      - name: 日记
+      - name: 无效参考
+      - name: 已完成项目
+      - name: 暂停事项
+  - name: 领域
+    icon: "🧭"
+    children:
+      - name: 第二大脑
+      - name: 家庭
+      - name: 健康
+      - name: 三观
+      - name: 投资
+      - name: 学习
+  - name: 模板
+    icon: "📋"
+  - name: 其他
+    icon: "📎"
+  - name: 项目
+    icon: "🎯"
+    children:
+      - name: 532方案搭建
+      - name: 不良资产
+      - name: 海南垃圾处理项目
+      - name: 展麟收尾事项
+      - name: 自媒体号成立
+  - name: 资源
+    icon: "💎"
+    children:
+      - name: 参考
+      - name: 灵感
+      - name: 模型碎片
+
+# --- 内容标签（对应 Obsidian #tag） ---
+content_tags:
+  - name: 学习
+    color: "#4A90D9"
+  - name: 反思
+    color: "#E67E22"
+  - name: 研究
+    color: "#27AE60"
+  - name: 资料
+    color: "#8E44AD"
+  - name: 问题
+    color: "#E74C3C"
+  - name: 想法
+    color: "#F1C40F"
+  - name: 笔记
+    color: "#3498DB"
+  - name: 待思考
+    color: "#95A5A6"
+  - name: 复盘
+    color: "#1ABC9C"
+  - name: 已完成
+    color: "#2ECC71"
+  - name: 整理
+    color: "#9B59B6"
+
+# --- 状态标签维度 ---
+status_dimensions:
+  - key: priority
+    display_name: 优先级
+    options: ["P0", "P1", "P2", "P3"]
+    default: "P2"
+  - key: stage
+    display_name: 阶段
+    options: ["想法", "进行中", "已完成", "归档"]
+    default: "想法"
+
+# --- 角色权限（多用户模式下生效） ---
+roles:
+  admin:
+    permissions: ["*"]
+  member:
+    permissions:
+      - "entity:create"
+      - "entity:read:authorized"
+      - "entity:tag:authorized"
+      - "search:authorized"
+      - "chat:authorized"
+    visible_scope:
+      folder_tags: ["*"]
+      content_tags: ["*"]
+      sources: ["upload", "obsidian"]
+      exclude_tags: []
+
+# --- Apple 同步 ---
+apple_sync:
+  enabled: true
+  auto_sync: true
+  interval_minutes: 30
+  sources:
+    notes: true
+    reminders: true
+    calendar: true

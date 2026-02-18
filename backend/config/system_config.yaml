@@ -1,0 +1,21 @@
+# System defaults - do not modify unless you know what you're doing.
+# These are overridden by user_config.yaml where applicable.
+
+review:
+  auto_approve_threshold: 0.95
+  default_queue_sort: "created_at_desc"
+  batch_size: 50
+
+search:
+  vector_top_k: 20
+  graph_depth: 2
+  rrf_k: 60
+  final_top_k: 10
+
+sync:
+  conflict_strategy: "latest_wins"
+  max_versions_per_entity: 100
+
+embedding:
+  chunk_size: 512
+  chunk_overlap: 50
