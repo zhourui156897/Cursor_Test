@@ -70,6 +70,7 @@ services:
 
   neo4j:
     image: neo4j:5.18-community
+    hostname: neo4j
     environment:
       NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-dierdanao123}"
       NEO4J_PLUGINS: '["apoc"]'

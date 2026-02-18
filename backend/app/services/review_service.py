@@ -146,6 +146,19 @@ async def approve_item(review_id: str, modifications: dict | None = None) -> dic
         except Exception as e:
             logger.warning("Failed to update Obsidian frontmatter for entity %s: %s", entity_id, e)
 
+    # Trigger async vectorization + knowledge graph extraction
+    try:
+        from app.services.embedding_service import embed_entity
+        from app.services.entity_extractor import extract_and_store
+        embed_ok = await embed_entity(entity_id)
+        extract_result = await extract_and_store(entity_id)
+        logger.info(
+            "Post-approval pipeline for %s: embed=%s, extract=%s",
+            entity_id, embed_ok, extract_result.get("status"),
+        )
+    except Exception as e:
+        logger.warning("Post-approval pipeline error for entity %s: %s", entity_id, e)
+
     logger.info("Approved review %s (status: %s) for entity %s", review_id, status, entity_id)
     return action
 

@@ -15,16 +15,30 @@ from app.storage.sqlite_client import init_db, close_db
 async def lifespan(app: FastAPI):
     await init_db()
     await _ensure_admin_user()
+
+    # Pre-connect Milvus (non-blocking: lite mode is instant, standalone may not be ready)
+    try:
+        from app.storage.milvus_client import get_milvus
+        await get_milvus()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Milvus not available at startup: %s", e)
+
     yield
+
     from app.services.llm_service import close_client
+    from app.storage.milvus_client import close_milvus
+    from app.storage.neo4j_client import close_neo4j
     await close_client()
+    await close_milvus()
+    await close_neo4j()
     await close_db()
 
 
 app = FastAPI(
     title="第二大脑 - dierdanao",
     description="人生价值系统 API",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -39,7 +53,14 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "0.1.0"}
+    from app.storage.milvus_client import get_collection_stats
+    from app.storage.neo4j_client import get_graph_stats
+    return {
+        "status": "ok",
+        "version": "0.2.0",
+        "milvus": await get_collection_stats(),
+        "neo4j": await get_graph_stats(),
+    }
 
 
 async def _ensure_admin_user():
