@@ -1,0 +1,98 @@
+---
+description: 第二大脑(dierdanao)项目全局上下文 — 架构、技术栈、文件布局、开发规范
+alwaysApply: true
+---
+
+# 第二大脑 (dierdanao) 项目上下文
+
+## 项目简介
+本地优先的"第二大脑 - 人生价值系统"。以 Obsidian 为中枢，Milvus 做向量存储，Neo4j 做知识图谱，Web Dashboard + Obsidian 插件双入口。
+
+## 技术栈
+- **后端**: Python 3.12 / FastAPI, 虚拟环境在 `backend/.venv/`
+- **前端**: React + TypeScript + TailwindCSS + Vite (端口 5173, 代理到 8000)
+- **向量库**: Milvus-Lite (开发) / Milvus Standalone (生产)
+- **图数据库**: Neo4j 5.x Community (Docker, bolt://localhost:7687)
+- **元数据库**: SQLite (路径 ~/.dierdanao/data/dierdanao.db)
+- **LLM**: OpenAI API (gpt-4o + text-embedding-3-small), 通过 user_config.yaml 配置
+- **Obsidian 插件**: TypeScript + esbuild, 位于 `obsidian-plugin/`
+
+## 关键目录结构
+```
+backend/
+  app/
+    main.py              # FastAPI 入口, lifespan 管理
+    config.py            # Settings(.env) + UserConfig(yaml)
+    api/                 # REST 路由: auth, tags, entities, upload, review, sync, search, graph, chat, history, settings_api
+    chat/                # rag_pipeline.py, agent_runner.py, agent_tools.py, conversation.py
+    services/            # llm_service.py, embedding_service.py, entity_extractor.py, tag_engine.py, review_service.py, file_processor.py
+    storage/             # sqlite_client.py, milvus_client.py, neo4j_client.py
+    sync/                # apple_notes.py, apple_reminders.py, apple_calendar.py, obsidian_writer.py, ingest_pipeline.py
+    auth/                # jwt.py, dependencies.py
+    models/              # user.py, tag.py, entity.py, review.py
+  config/
+    user_config.yaml     # 用户配置 (标签体系, LLM, Apple同步) — 不入Git
+    user_config.example.yaml
+    system_config.yaml
+frontend/
+  src/
+    api/client.ts        # 统一 API 客户端 + 所有类型定义
+    pages/               # Dashboard, TagManager, Entities, UserManage, Ingest, ReviewQueue, Search, GraphView, Chat, Settings, Login
+    components/Layout.tsx # 侧栏导航
+obsidian-plugin/
+  main.ts                # 插件入口
+  src/                   # api.ts, settings.ts, review-view.ts, chat-view.ts, search-modal.ts
+  styles.css
+```
+
+## 配置体系
+- `.env` — 环境变量 (端口, 路径, JWT密钥, Neo4j密码)
+- `backend/config/user_config.yaml` — 用户配置 (标签体系, LLM API Key/模型, Apple同步)
+- `config.py` 加载顺序: .env → user_config.yaml 覆盖 LLM/路径字段
+
+## 数据流
+Apple三件套/文件上传 → Obsidian笔记 → LLM标签建议 → 人工审核 → 写入Obsidian frontmatter + 向量化(Milvus) + 实体抽取(Neo4j) + 元数据(SQLite)
+
+## API Key 安全
+- API Key 存在 user_config.yaml (已 .gitignore)
+- llm_service.py 每次请求从 user_config 读取 key，加 Bearer header
+- 设置页面脱敏显示 (sk-proj-****TLAA)
+
+## 开发阶段 (全部已完成)
+- Phase 1: 后端骨架 + SQLite + 标签/实体 CRUD + 前端初始化
+- Phase 2: Apple同步 + 文件处理 + LLM嵌入 + Milvus/Neo4j
+- Phase 3: 语义搜索 + 知识图谱 + RAG问答 + 对话系统
+- Phase 4: Settings UI + Agent框架(9工具) + Obsidian插件
+
+## 常见操作
+```bash
+# 启动后端
+cd backend && source .venv/bin/activate && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 启动前端
+cd frontend && npx vite --port 5173
+
+# 构建 Obsidian 插件
+cd obsidian-plugin && node esbuild.config.mjs production
+
+# Docker (Milvus + Neo4j)
+docker compose up -d
+```
+
+## GitHub
+- 仓库: https://github.com/zhourui156897/Cursor_Test.git
+- 用户: zhourui156897
+- 分支: main
+
+## Obsidian Vault
+- 路径: ~/Documents/ObsidianVault
+- 文件夹标签: 归档(6子), 领域(6子), 模板, 其他, 项目(5子), 资源(3子)
+- 内容标签: 学习/反思/研究/资料/问题/想法/笔记/待思考/复盘/已完成/整理
+- 状态维度: 优先级(P0-P3), 阶段(想法/进行中/已完成/归档)
+
+## 编码规范
+- 后端用中文注释和 docstring
+- 前端页面中文 UI
+- 始终用中文回复用户
+- API 返回中文 message
+- user_config.yaml 和 .env 不提交 Git
