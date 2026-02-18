@@ -93,6 +93,10 @@ from app.api import entities as entities_router
 from app.api import upload as upload_router
 from app.api import review as review_router
 from app.api import sync as sync_router
+from app.api import search as search_router
+from app.api import graph as graph_router
+from app.api import chat as chat_router
+from app.api import history as history_router
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["认证"])
 app.include_router(tags_router.router, prefix="/api/tags", tags=["标签"])
@@ -100,3 +104,7 @@ app.include_router(entities_router.router, prefix="/api/entities", tags=["实体
 app.include_router(upload_router.router, prefix="/api/upload", tags=["上传"])
 app.include_router(review_router.router, prefix="/api/review", tags=["审核"])
 app.include_router(sync_router.router, prefix="/api/sync", tags=["同步"])
+app.include_router(search_router.router, prefix="/api/search", tags=["搜索"])
+app.include_router(graph_router.router, prefix="/api/graph", tags=["图谱"])
+app.include_router(chat_router.router, prefix="/api/chat", tags=["对话"])
+app.include_router(history_router.router, prefix="/api/history", tags=["历史"])

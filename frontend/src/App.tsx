@@ -9,6 +9,9 @@ import Entities from './pages/Entities';
 import UserManage from './pages/UserManage';
 import Ingest from './pages/Ingest';
 import ReviewQueue from './pages/ReviewQueue';
+import Search from './pages/Search';
+import GraphView from './pages/GraphView';
+import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -43,6 +46,9 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/ingest" element={<Ingest />} />
             <Route path="/review" element={<ReviewQueue />} />
+            <Route path="/search" element={<Search />} />
+            <Route path="/graph" element={<GraphView />} />
+            <Route path="/chat" element={<Chat />} />
             <Route path="/entities" element={<Entities />} />
             <Route path="/tags" element={<TagManager />} />
             <Route path="/users" element={<UserManage />} />

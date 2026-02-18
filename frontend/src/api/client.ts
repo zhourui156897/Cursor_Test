@@ -110,7 +110,73 @@ export const syncApi = {
   updateConfig: (config: Record<string, unknown>) => api.put('/sync/config', config),
 };
 
+// Search
+export const searchApi = {
+  search: (q: string, topK = 10, source?: string, mode = 'hybrid') => {
+    const p = new URLSearchParams({ q, top_k: String(topK), mode });
+    if (source) p.set('source', source);
+    return api.get<SearchResponse>(`/search?${p}`);
+  },
+};
+
+// Graph
+export const graphApi = {
+  stats: () => api.get<GraphStats>('/graph/stats'),
+  entityGraph: (id: string, depth = 1) => api.get<GraphData>(`/graph/entity/${id}?depth=${depth}`),
+  overview: (limit = 100) => api.get<GraphData>(`/graph/overview?limit=${limit}`),
+};
+
+// Chat
+export const chatApi = {
+  send: (message: string, conversationId?: string) =>
+    api.post<ChatResponse>('/chat/send', { message, conversation_id: conversationId }),
+  sendStream: (message: string, conversationId?: string) =>
+    fetch(`${BASE}/chat/send/stream`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ message, conversation_id: conversationId, stream: true }),
+    }),
+  listConversations: (limit = 50) => api.get<Conversation[]>(`/chat/conversations?limit=${limit}`),
+  getMessages: (id: string) => api.get<ChatMessage[]>(`/chat/conversations/${id}/messages`),
+  createConversation: (title = '') => api.post<{ id: string }>('/chat/conversations', { title }),
+  deleteConversation: (id: string) => api.delete(`/chat/conversations/${id}`),
+};
+
+// History
+export const historyApi = {
+  versions: (entityId: string) => api.get<EntityVersion[]>(`/history/${entityId}/versions`),
+  version: (entityId: string, vnum: number) => api.get<EntityVersion>(`/history/${entityId}/versions/${vnum}`),
+  diff: (entityId: string, a: number, b: number) =>
+    api.get<VersionDiff>(`/history/${entityId}/diff?a=${a}&b=${b}`),
+  timeline: (entityId: string) => api.get<TimelineItem[]>(`/history/${entityId}/timeline`),
+};
+
 // Types
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+  total: number;
+}
+export interface SearchResult {
+  entity_id: string;
+  title: string | null;
+  content: string | null;
+  source: string | null;
+  obsidian_path: string | null;
+  distance: number | null;
+  match_type: string;
+}
+export interface GraphStats { available: boolean; node_count: number; relationship_count: number }
+export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[] }
+export interface GraphNode { id: string; title: string; source: string; labels: string[] }
+export interface GraphEdge { source: string; target: string; type: string }
+export interface ChatResponse { conversation_id: string; answer: string; sources: ChatSource[] }
+export interface ChatSource { index: number; entity_id: string; title: string; source: string }
+export interface Conversation { id: string; title: string; created_at: string; updated_at: string; summary: string | null }
+export interface ChatMessage { id: string; role: string; content: string; sources: ChatSource[] | null; created_at: string }
+export interface VersionDiff { entity_id: string; version_a: EntityVersion; version_b: EntityVersion; title_changed: boolean; content_changed: boolean }
+export interface TimelineItem { id: string; dimension: string; old_value: string | null; new_value: string | null; changed_by: string | null; changed_at: string; note: string | null }
+
 export interface ReviewItem {
   id: string;
   entity_id: string;

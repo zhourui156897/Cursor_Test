@@ -1,12 +1,15 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Brain, Tags, FileText, Users, LayoutDashboard, Download, ClipboardCheck, Settings } from 'lucide-react';
+import { Brain, Tags, FileText, Users, LayoutDashboard, Download, ClipboardCheck, Settings, Search, Share2, MessageSquare } from 'lucide-react';
 import { reviewApi } from '../api/client';
 
 const NAV_ITEMS = [
   { path: '/', label: '仪表盘', icon: LayoutDashboard },
   { path: '/ingest', label: '数据摄入', icon: Download },
   { path: '/review', label: '审核队列', icon: ClipboardCheck, badge: true },
+  { path: '/search', label: '语义搜索', icon: Search },
+  { path: '/graph', label: '知识图谱', icon: Share2 },
+  { path: '/chat', label: '智能对话', icon: MessageSquare },
   { path: '/entities', label: '实体管理', icon: FileText },
   { path: '/tags', label: '标签管理', icon: Tags },
   { path: '/users', label: '用户管理', icon: Users },
@@ -55,10 +58,10 @@ export default function Layout() {
           })}
         </nav>
         <div className="px-4 py-3 border-t border-gray-700 text-xs text-gray-500">
-          v0.2.0
+          v0.3.0
         </div>
       </aside>
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto p-6">
         <Outlet />
       </main>
     </div>
