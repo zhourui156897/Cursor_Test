@@ -150,6 +150,48 @@ async def update_note_frontmatter(
     return True
 
 
+async def move_note_to_folder(
+    obsidian_path: str,
+    folder_tag: str,
+) -> str | None:
+    """Move an Obsidian note to the folder corresponding to a folder_tag.
+
+    E.g. folder_tag="领域/第二大脑" → move file to <vault>/领域/第二大脑/<filename>.md
+    Returns new relative path on success, None on failure.
+    """
+    settings = get_settings()
+    vault = settings.resolved_vault_path
+    src = vault / obsidian_path
+
+    if not src.exists():
+        logger.warning("Cannot move note, source missing: %s", src)
+        return None
+
+    target_dir = vault / folder_tag
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = target_dir / src.name
+    counter = 1
+    while dest.exists() and dest != src:
+        stem = src.stem
+        dest = target_dir / f"{stem}_{counter}{src.suffix}"
+        counter += 1
+
+    if dest == src:
+        logger.debug("Note already in target folder: %s", obsidian_path)
+        return obsidian_path
+
+    import shutil
+    try:
+        shutil.move(str(src), str(dest))
+        new_rel = str(dest.relative_to(vault))
+        logger.info("Moved Obsidian note: %s → %s", obsidian_path, new_rel)
+        return new_rel
+    except Exception as e:
+        logger.error("Failed to move note %s → %s: %s", src, dest, e)
+        return None
+
+
 def note_from_apple_note(note) -> dict:
     """Convert AppleNote dataclass to write_note_to_vault kwargs."""
     return dict(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import aiosqlite
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -9,6 +10,27 @@ from contextlib import asynccontextmanager
 from app.config import get_settings
 
 _db_connection: aiosqlite.Connection | None = None
+
+
+def ensure_data_dir_writable() -> None:
+    """启动前检查数据目录可写，不可写则抛出明确错误（最佳实践：必须先可写再启动）。"""
+    settings = get_settings()
+    d = settings.resolved_data_dir
+    d.mkdir(parents=True, exist_ok=True)
+    path = str(d)
+    if not os.access(path, os.W_OK):
+        raise RuntimeError(
+            f"数据目录不可写，无法正常保存对话与实体。请执行后重启: chmod -R u+rwx {path}"
+        )
+    # 实际写一次再删，避免仅目录可写而文件不可写
+    probe = d / ".write_check"
+    try:
+        probe.write_text("")
+        probe.unlink()
+    except OSError as e:
+        raise RuntimeError(
+            f"数据目录不可写: {d}（{e}）。请执行后重启: chmod -R u+rwx {path}"
+        ) from e
 
 
 async def get_db() -> aiosqlite.Connection:
@@ -278,6 +300,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id
 
 
 async def init_db():
+    ensure_data_dir_writable()
     db = await get_db()
     await db.executescript(SCHEMA_SQL)
     await db.commit()

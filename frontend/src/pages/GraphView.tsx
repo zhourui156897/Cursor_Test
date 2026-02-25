@@ -6,16 +6,21 @@ export default function GraphView() {
   const [stats, setStats] = useState<GraphStats | null>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [s, g] = await Promise.all([graphApi.stats(), graphApi.overview(80)]);
       setStats(s);
       setGraphData(g);
-    } catch {
-      /* neo4j unavailable */
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '图服务请求失败';
+      setError(msg);
+      setStats({ available: false, node_count: 0, relationship_count: 0, error: msg });
+      setGraphData({ nodes: [], edges: [] });
     } finally {
       setLoading(false);
     }
@@ -35,7 +40,10 @@ export default function GraphView() {
       <div className="text-center py-20">
         <Share2 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
         <h2 className="text-xl font-semibold text-gray-600 mb-2">知识图谱未就绪</h2>
-        <p className="text-gray-400">Neo4j 未连接或暂无数据。审核通过实体后将自动构建图谱。</p>
+        <p className="text-gray-400 mb-2">Neo4j 未连接或暂无数据。审核通过实体后将自动构建图谱。</p>
+        {(error || stats?.error) && (
+          <p className="text-sm text-amber-600 max-w-md mx-auto">{error || stats?.error}</p>
+        )}
       </div>
     );
   }

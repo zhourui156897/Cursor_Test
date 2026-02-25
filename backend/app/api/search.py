@@ -25,6 +25,7 @@ class SearchResponse(BaseModel):
     query: str
     results: list[SearchResult]
     total: int
+    message: str | None = None  # 当向量检索不可用等时给出说明
 
 
 @router.get("", response_model=SearchResponse)
@@ -36,9 +37,19 @@ async def search(
 ):
     """Hybrid semantic search across all data stores."""
     results: list[SearchResult] = []
+    message: str | None = None
 
     if mode in ("vector", "hybrid"):
-        vector_hits = await semantic_search(q, top_k=top_k, source_filter=source)
+        try:
+            vector_hits = await semantic_search(q, top_k=top_k, source_filter=source)
+        except Exception:
+            vector_hits = []
+            message = (
+                "向量检索暂不可用（Milvus 或 Embedding 服务异常），仅展示关键词匹配结果。"
+                "请检查：1) 设置中 LLM 是否已连接 2) Milvus 是否已启动 3) 是否有已审核并向量化的实体。"
+            )
+        else:
+            vector_hits = vector_hits or []
         for hit in vector_hits:
             results.append(SearchResult(
                 entity_id=hit["entity_id"],
@@ -67,7 +78,7 @@ async def search(
     if mode == "hybrid":
         results = _rrf_merge(results, top_k)
 
-    return SearchResponse(query=q, results=results[:top_k], total=len(results))
+    return SearchResponse(query=q, results=results[:top_k], total=len(results), message=message)
 
 
 async def _metadata_search(query: str, top_k: int = 10, source: str | None = None) -> list[dict]:

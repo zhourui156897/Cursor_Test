@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.config import get_settings
 from app.chat.conversation import (
     create_conversation,
     list_conversations,
@@ -21,6 +22,18 @@ from app.chat.agent_runner import run_agent
 from app.services.llm_service import check_available
 
 logger = logging.getLogger(__name__)
+
+
+def _raise_if_readonly(e: Exception) -> None:
+    """若为数据库只读错误，则抛出 503 并提示修复方式（最佳实践：不降级，明确报错）."""
+    msg = str(e).lower()
+    if "readonly" in msg and "database" in msg:
+        path = str(get_settings().resolved_data_dir)
+        raise HTTPException(
+            503,
+            detail=f"数据目录不可写，无法保存对话。请执行后重启后端: chmod -R u+rwx {path}",
+        ) from e
+
 
 router = APIRouter()
 
@@ -46,18 +59,29 @@ class ConversationCreate(BaseModel):
 @router.post("/send", response_model=ChatResponse)
 async def send_message(req: ChatRequest):
     """Send a message and get a RAG or Agent-powered response."""
-    conv_id = req.conversation_id
-    if not conv_id:
-        conv_id = await create_conversation(title=req.message[:30])
-
-    await add_message(conv_id, "user", req.message)
+    try:
+        conv_id = req.conversation_id
+        if not conv_id:
+            conv_id = await create_conversation(title=req.message[:30])
+        await add_message(conv_id, "user", req.message)
+    except Exception as e:
+        _raise_if_readonly(e)
+        raise
 
     history = await get_conversation_messages(conv_id, limit=20)
     history_dicts = [{"role": m["role"], "content": m["content"]} for m in history[:-1]]
 
     if req.mode == "agent":
-        result = await run_agent(req.message, history=history_dicts if history_dicts else None)
-        await add_message(conv_id, "assistant", result["answer"], sources=[])
+        try:
+            result = await run_agent(req.message, history=history_dicts if history_dicts else None)
+        except Exception as e:
+            _raise_if_readonly(e)
+            raise HTTPException(500, detail=f"Agent 执行失败: {e!s}")
+        try:
+            await add_message(conv_id, "assistant", result["answer"], sources=[])
+        except Exception as e:
+            _raise_if_readonly(e)
+            raise
         return ChatResponse(
             conversation_id=conv_id,
             answer=result["answer"],
@@ -65,8 +89,16 @@ async def send_message(req: ChatRequest):
             tool_calls=result.get("tool_calls", []),
         )
 
-    ctx = await run_rag(req.message, history=history_dicts if history_dicts else None)
-    await add_message(conv_id, "assistant", ctx.answer, sources=ctx.sources)
+    try:
+        ctx = await run_rag(req.message, history=history_dicts if history_dicts else None)
+    except Exception as e:
+        _raise_if_readonly(e)
+        raise HTTPException(500, detail=f"RAG 执行失败: {e!s}")
+    try:
+        await add_message(conv_id, "assistant", ctx.answer, sources=ctx.sources)
+    except Exception as e:
+        _raise_if_readonly(e)
+        raise
     return ChatResponse(
         conversation_id=conv_id,
         answer=ctx.answer,
@@ -77,11 +109,14 @@ async def send_message(req: ChatRequest):
 @router.post("/send/stream")
 async def send_message_stream(req: ChatRequest):
     """Send a message and stream the response via SSE."""
-    conv_id = req.conversation_id
-    if not conv_id:
-        conv_id = await create_conversation(title=req.message[:30])
-
-    await add_message(conv_id, "user", req.message)
+    try:
+        conv_id = req.conversation_id
+        if not conv_id:
+            conv_id = await create_conversation(title=req.message[:30])
+        await add_message(conv_id, "user", req.message)
+    except Exception as e:
+        _raise_if_readonly(e)
+        raise
 
     history = await get_conversation_messages(conv_id, limit=20)
     history_dicts = [{"role": m["role"], "content": m["content"]} for m in history[:-1]]
@@ -96,14 +131,22 @@ async def send_message_stream(req: ChatRequest):
             chunks = _split_into_chunks(result["answer"], 20)
             for chunk in chunks:
                 yield f"data: {json.dumps({'type': 'token', 'content': chunk}, ensure_ascii=False)}\n\n"
-            await add_message(conv_id, "assistant", result["answer"])
+            try:
+                await add_message(conv_id, "assistant", result["answer"])
+            except Exception as e:
+                _raise_if_readonly(e)
+                raise
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         else:
             ctx = await run_rag(req.message, history=history_dicts if history_dicts else None)
             chunks = _split_into_chunks(ctx.answer, 20)
             for chunk in chunks:
                 yield f"data: {json.dumps({'type': 'token', 'content': chunk}, ensure_ascii=False)}\n\n"
-            await add_message(conv_id, "assistant", ctx.answer, sources=ctx.sources)
+            try:
+                await add_message(conv_id, "assistant", ctx.answer, sources=ctx.sources)
+            except Exception as e:
+                _raise_if_readonly(e)
+                raise
             yield f"data: {json.dumps({'type': 'sources', 'sources': ctx.sources}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

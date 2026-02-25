@@ -110,18 +110,27 @@ async def ingest_entity(
     )
     await db.commit()
 
-    # Step 4 & 5: LLM tag suggestion + review queue (skip if LLM unavailable)
+    # Step 4 & 5: LLM tag suggestion + review queue
+    suggestion = {
+        "folder_tags": [], "content_tags": [], "status": {},
+        "confidence": {}, "summary": title or "",
+    }
     if not skip_llm:
         from app.services.llm_service import check_available
         llm_ok = await check_available()
         if llm_ok:
             try:
                 suggestion = await suggest_tags(title, content, source, metadata)
-                await create_review_item(entity_id, suggestion)
             except Exception as e:
                 logger.warning("LLM tag suggestion failed for '%s': %s", title, e)
         else:
-            logger.info("LLM unavailable, skipping tag suggestion for '%s'", title)
+            logger.info("LLM unavailable, using empty suggestion for '%s'", title)
+
+    # Always create a review item so user can manually tag
+    try:
+        await create_review_item(entity_id, suggestion)
+    except Exception as e:
+        logger.warning("Failed to create review item for '%s': %s", title, e)
 
     return {
         "id": entity_id,
@@ -167,51 +176,75 @@ async def _update_existing_entity(
     return {"id": entity_id, "status": "updated", "version": new_version}
 
 
-async def ingest_apple_notes() -> list[dict]:
-    """Run the full Apple Notes ingestion pipeline."""
-    from app.sync.apple_notes import fetch_all_notes, AppleNote
-    notes = await fetch_all_notes()
+async def ingest_apple_notes(
+    limit: int = 50,
+    order: str = "newest",
+    folder_whitelist: list[str] | None = None,
+) -> list[dict]:
+    """Run the full Apple Notes ingestion pipeline. Optional folder_whitelist = only sync these folders."""
+    from app.sync.apple_notes import fetch_all_notes
+    notes = await fetch_all_notes(limit=limit, order=order, folder_whitelist=folder_whitelist)
     results = []
     for note in notes:
         kwargs = note_from_apple_note(note)
+        meta = kwargs.pop("extra_meta", None)
         result = await ingest_entity(
             **kwargs,
             content_type="text",
-            metadata=kwargs.pop("extra_meta", None),
+            metadata=meta,
             created_by="apple_notes_sync",
         )
         results.append(result)
     return results
 
 
-async def ingest_apple_reminders() -> list[dict]:
-    """Run the full Apple Reminders ingestion pipeline."""
+async def ingest_apple_reminders(
+    limit: int = 50,
+    order: str = "newest",
+    list_names: list[str] | None = None,
+    due_after: str | None = None,
+    due_before: str | None = None,
+) -> list[dict]:
+    """Run the full Apple Reminders ingestion pipeline. Optional list_names and due range."""
     from app.sync.apple_reminders import fetch_all_reminders
-    reminders = await fetch_all_reminders()
+    reminders = await fetch_all_reminders(
+        limit=limit, order=order,
+        list_names=list_names, due_after=due_after, due_before=due_before,
+    )
     results = []
     for reminder in reminders:
         kwargs = note_from_apple_reminder(reminder)
+        meta = kwargs.pop("extra_meta", None)
         result = await ingest_entity(
             **kwargs,
             content_type="text",
-            metadata=kwargs.pop("extra_meta", None),
+            metadata=meta,
             created_by="apple_reminders_sync",
         )
         results.append(result)
     return results
 
 
-async def ingest_apple_calendar() -> list[dict]:
-    """Run the full Apple Calendar ingestion pipeline."""
+async def ingest_apple_calendar(
+    limit: int = 50,
+    order: str = "newest",
+    days_back: int = 30,
+    days_forward: int = 90,
+) -> list[dict]:
+    """Run the full Apple Calendar ingestion pipeline. Time range = now - days_back to now + days_forward."""
     from app.sync.apple_calendar import fetch_all_events
-    events = await fetch_all_events()
+    events = await fetch_all_events(
+        limit=limit, order=order,
+        days_back=days_back, days_forward=days_forward,
+    )
     results = []
     for event in events:
         kwargs = note_from_apple_event(event)
+        meta = kwargs.pop("extra_meta", None)
         result = await ingest_entity(
             **kwargs,
             content_type="text",
-            metadata=kwargs.pop("extra_meta", None),
+            metadata=meta,
             created_by="apple_calendar_sync",
         )
         results.append(result)

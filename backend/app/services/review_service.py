@@ -38,32 +38,40 @@ async def create_review_item(
     return review_id
 
 
-async def list_pending(page: int = 1, page_size: int = 50) -> list[dict]:
-    """List pending review items with entity info."""
+async def list_reviews(status: str = "all", page: int = 1, page_size: int = 50) -> dict:
+    """List review items with optional status filter. Returns {items, total, page}."""
     db = await get_db()
     offset = (page - 1) * page_size
 
+    where = ""
+    params: list = []
+    if status != "all":
+        where = "WHERE r.status = ?"
+        params.append(status)
+
+    count_cursor = await db.execute(
+        f"SELECT COUNT(*) as cnt FROM review_queue r {where}", params
+    )
+    total = (await count_cursor.fetchone())["cnt"]
+
     cursor = await db.execute(
-        """SELECT r.*, e.title as entity_title, e.source as entity_source,
-                  e.content as entity_content
+        f"""SELECT r.*, e.title as entity_title, e.source as entity_source,
+                  substr(e.content, 1, 300) as entity_content
            FROM review_queue r
            JOIN entities e ON r.entity_id = e.id
-           WHERE r.status = 'pending'
+           {where}
            ORDER BY r.created_at DESC
            LIMIT ? OFFSET ?""",
-        (page_size, offset),
+        params + [page_size, offset],
     )
-    rows = [dict(r) for r in await cursor.fetchall()]
+    rows = _parse_json_fields([dict(r) for r in await cursor.fetchall()])
+    return {"items": rows, "total": total, "page": page, "page_size": page_size}
 
-    for row in rows:
-        for key in ("suggested_folder_tags", "suggested_content_tags", "suggested_status", "confidence_scores", "reviewer_action"):
-            if row.get(key) and isinstance(row[key], str):
-                try:
-                    row[key] = json.loads(row[key])
-                except json.JSONDecodeError:
-                    pass
 
-    return rows
+async def list_pending(page: int = 1, page_size: int = 50) -> list[dict]:
+    """List pending review items with entity info."""
+    result = await list_reviews(status="pending", page=page, page_size=page_size)
+    return result["items"]
 
 
 async def get_pending_count() -> int:
@@ -72,6 +80,28 @@ async def get_pending_count() -> int:
     cursor = await db.execute("SELECT COUNT(*) as cnt FROM review_queue WHERE status = 'pending'")
     row = await cursor.fetchone()
     return row["cnt"]
+
+
+async def get_stats() -> dict:
+    """Get review counts by status."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT status, COUNT(*) as cnt FROM review_queue GROUP BY status"
+    )
+    stats = {r["status"]: r["cnt"] for r in await cursor.fetchall()}
+    stats["total"] = sum(stats.values())
+    return stats
+
+
+def _parse_json_fields(rows: list[dict]) -> list[dict]:
+    for row in rows:
+        for key in ("suggested_folder_tags", "suggested_content_tags", "suggested_status", "confidence_scores", "reviewer_action"):
+            if row.get(key) and isinstance(row[key], str):
+                try:
+                    row[key] = json.loads(row[key])
+                except json.JSONDecodeError:
+                    pass
+    return rows
 
 
 async def approve_item(review_id: str, modifications: dict | None = None) -> dict:
@@ -129,12 +159,26 @@ async def approve_item(review_id: str, modifications: dict | None = None) -> dic
     )
     await db.commit()
 
-    # Sync tags back to Obsidian note frontmatter
+    # Move note to folder tag directory, then update frontmatter
     cursor = await db.execute("SELECT obsidian_path FROM entities WHERE id = ?", (entity_id,))
     entity_row = await cursor.fetchone()
     if entity_row and entity_row["obsidian_path"]:
+        current_path = entity_row["obsidian_path"]
         try:
-            from app.sync.obsidian_writer import update_note_frontmatter
+            from app.sync.obsidian_writer import move_note_to_folder, update_note_frontmatter
+
+            # Step 1: Move file to the first folder_tag directory
+            if folder_tags:
+                new_path = await move_note_to_folder(current_path, folder_tags[0])
+                if new_path and new_path != current_path:
+                    current_path = new_path
+                    await db.execute(
+                        "UPDATE entities SET obsidian_path = ? WHERE id = ?",
+                        (current_path, entity_id),
+                    )
+                    await db.commit()
+
+            # Step 2: Update frontmatter with tags
             fm_updates: dict = {"review_status": "reviewed"}
             if folder_tags:
                 fm_updates["folder_tags"] = folder_tags
@@ -142,9 +186,9 @@ async def approve_item(review_id: str, modifications: dict | None = None) -> dic
                 fm_updates["tags"] = content_tags
             if status_values:
                 fm_updates["status"] = status_values
-            await update_note_frontmatter(entity_row["obsidian_path"], fm_updates)
+            await update_note_frontmatter(current_path, fm_updates)
         except Exception as e:
-            logger.warning("Failed to update Obsidian frontmatter for entity %s: %s", entity_id, e)
+            logger.warning("Failed to update Obsidian note for entity %s: %s", entity_id, e)
 
     # Trigger async vectorization + knowledge graph extraction
     try:

@@ -13,6 +13,7 @@ from typing import Any
 from app.storage.sqlite_client import get_db
 from app.services.embedding_service import semantic_search
 from app.storage.neo4j_client import is_available as neo4j_ok, run_cypher, get_entity_relations
+from app.sync.messages import APPLE_JXA_USER_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,102 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "name": "get_statistics",
             "description": "获取知识库的统计信息（实体数量、标签使用、来源分布）",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_datetime",
+            "description": "获取服务器当前日期时间（ISO 格式）。当用户说「今天」「明天」「下午3点」等相对时间时，必须先调用本工具得到当前时间，再计算 start_date/end_date/due_date，严禁猜测或使用 2023 等错误年份。",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    # ─── Apple 三件套：实时读取（从系统 App 拉取，非数据库） ───
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_apple_data",
+            "description": "从用户 Mac 上的 Apple 备忘录/待办/日历实时读取最新数据（不经过知识库），用于总结、查看最新内容。需指定来源。日历可指定时间范围，待办可指定截止范围。涉及「今天」「明天」等请先调用 get_current_datetime。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "enum": ["apple_notes", "apple_reminders", "apple_calendar"],
+                        "description": "数据来源: apple_notes 备忘录, apple_reminders 待办, apple_calendar 日历",
+                    },
+                    "limit": {"type": "integer", "description": "最多返回条数", "default": 20},
+                    "order": {
+                        "type": "string",
+                        "enum": ["newest", "oldest"],
+                        "description": "排序: newest 由新到旧, oldest 由旧到新",
+                        "default": "newest",
+                    },
+                    "days_back": {"type": "integer", "description": "仅日历: 从今天往前多少天内的事件，如 0 表示只看今天及以后", "default": 0},
+                    "days_forward": {"type": "integer", "description": "仅日历: 从今天往后多少天内的事件，如 1 表示包含明天", "default": 7},
+                    "due_after": {"type": "string", "description": "仅待办: 只返回截止日期不早于此的，ISO 日期如 2026-02-20。查「明天待办」时设为明天日期。"},
+                    "due_before": {"type": "string", "description": "仅待办: 只返回截止日期不晚于此的，ISO 日期如 2026-02-21。"},
+                },
+                "required": ["source"],
+            },
+        },
+    },
+    # ─── Apple 三件套：写入（真正在系统 App 中创建） ───
+    {
+        "type": "function",
+        "function": {
+            "name": "create_apple_note",
+            "description": "在用户 Mac 的「备忘录」App 中创建一条新备忘录。仅当用户明确要求创建备忘录时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "备忘录标题"},
+                    "body": {"type": "string", "description": "备忘录正文内容", "default": ""},
+                    "folder": {"type": "string", "description": "文件夹名称（可选，为空则默认文件夹）", "default": ""},
+                    "add_to_knowledge_base": {"type": "boolean", "description": "是否同时记入第二大脑知识库便于检索", "default": True},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_apple_reminder",
+            "description": "在用户 Mac 的「提醒事项」App 中创建一条新待办。仅当用户明确要求创建待办/提醒时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "待办标题"},
+                    "body": {"type": "string", "description": "备注内容", "default": ""},
+                    "list_name": {"type": "string", "description": "列表名称（可选）", "default": ""},
+                    "due_date": {"type": "string", "description": "截止时间 ISO 格式，如 2026-02-20T09:00:00", "default": ""},
+                    "priority": {"type": "integer", "description": "优先级 0无 1高 5中 9低", "default": 0},
+                    "add_to_knowledge_base": {"type": "boolean", "description": "是否同时记入第二大脑知识库", "default": True},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_apple_event",
+            "description": "在用户 Mac 的「日历」App 中创建一条新日历事件。仅当用户明确要求创建日历/日程时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "事件标题"},
+                    "start_date": {"type": "string", "description": "开始时间 ISO 格式，如 2026-02-20T09:00:00"},
+                    "end_date": {"type": "string", "description": "结束时间 ISO 格式"},
+                    "description": {"type": "string", "description": "事件描述", "default": ""},
+                    "location": {"type": "string", "description": "地点", "default": ""},
+                    "calendar": {"type": "string", "description": "日历名称（可选）", "default": ""},
+                    "all_day": {"type": "boolean", "description": "是否全天", "default": False},
+                    "add_to_knowledge_base": {"type": "boolean", "description": "是否同时记入第二大脑知识库", "default": True},
+                },
+                "required": ["title", "start_date", "end_date"],
+            },
         },
     },
 ]
@@ -367,6 +464,25 @@ async def _summarize_content(args: dict) -> Any:
     return {"summary": result}
 
 
+async def _get_current_datetime(_args: dict) -> Any:
+    """返回当前日期时间，供 Agent 计算「今天」「明天」等。"""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    # 也返回本地时间常用格式，便于 LLM 理解
+    try:
+        import zoneinfo
+        local = now.astimezone(zoneinfo.ZoneInfo("Asia/Shanghai"))
+    except Exception:
+        local = now
+    return {
+        "iso_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "iso_local": local.strftime("%Y-%m-%dT%H:%M:%S"),
+        "date_only": local.strftime("%Y-%m-%d"),
+        "weekday_cn": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][local.weekday()],
+        "hint": "创建日历/待办时，start_date/end_date/due_date 请用与 iso_local 同格式的日期时间，例如今天下午3点即 date_only + 'T15:00:00'",
+    }
+
+
 async def _get_statistics(args: dict) -> Any:
     db = await get_db()
 
@@ -394,6 +510,199 @@ async def _get_statistics(args: dict) -> Any:
     }
 
 
+# ─── Apple 三件套：实时读取 ───
+
+
+async def _fetch_apple_data(args: dict) -> Any:
+    """从 Mac 上的 Apple 备忘录/待办/日历实时拉取数据（JXA），返回给 Agent 用于总结或回答。"""
+    source = args.get("source", "")
+    limit = args.get("limit", 10)
+    order = args.get("order", "newest")
+    try:
+        return await _fetch_apple_data_impl(args, source, limit, order)
+    except Exception as e:
+        logger.exception("fetch_apple_data failed: %s", e)
+        return {"error": APPLE_JXA_USER_MESSAGE}
+
+
+async def _fetch_apple_data_impl(args: dict, source: str, limit: int, order: str) -> Any:
+    if source == "apple_notes":
+        from app.sync.apple_notes import fetch_all_notes
+        notes = await fetch_all_notes(limit=min(limit, 50), order=order)
+        return {
+            "source": "apple_notes",
+            "count": len(notes),
+            "items": [
+                {
+                    "id": n.id,
+                    "title": n.name,
+                    "content_preview": (n.body_text or "")[:500],
+                    "folder": getattr(n, "folder", ""),
+                    "created": getattr(n, "creation_date", ""),
+                    "modified": getattr(n, "modification_date", ""),
+                }
+                for n in notes
+            ],
+        }
+    if source == "apple_reminders":
+        from app.sync.apple_reminders import fetch_all_reminders
+        due_after = (args.get("due_after") or "").strip() or None
+        due_before = (args.get("due_before") or "").strip() or None
+        reminders = await fetch_all_reminders(
+            limit=min(limit, 50), order=order,
+            due_after=due_after, due_before=due_before,
+        )
+        return {
+            "source": "apple_reminders",
+            "count": len(reminders),
+            "items": [
+                {
+                    "id": r.id,
+                    "title": r.name,
+                    "body": (r.body or "")[:200],
+                    "list": r.list_name,
+                    "completed": r.completed,
+                    "due_date": r.due_date,
+                    "priority": r.priority,
+                    "modified": r.modification_date,
+                }
+                for r in reminders
+            ],
+        }
+    if source == "apple_calendar":
+        from app.sync.apple_calendar import fetch_all_events
+        days_back = int(args.get("days_back", 0))
+        days_forward = int(args.get("days_forward", 7))
+        events = await fetch_all_events(
+            limit=min(limit, 50), order=order,
+            days_back=max(0, days_back), days_forward=max(0, days_forward),
+        )
+        return {
+            "source": "apple_calendar",
+            "count": len(events),
+            "items": [
+                {
+                    "id": e.id,
+                    "title": e.summary,
+                    "start": e.start_date,
+                    "end": e.end_date,
+                    "location": e.location,
+                    "calendar": e.calendar_name,
+                    "all_day": e.all_day,
+                }
+                for e in events
+            ],
+        }
+    return {"error": "source 必须是 apple_notes / apple_reminders / apple_calendar"}
+
+
+# ─── Apple 三件套：写入（真正调用系统 App） ───
+
+
+async def _create_apple_note(args: dict) -> Any:
+    try:
+        return await _create_apple_note_impl(args)
+    except Exception as e:
+        logger.exception("create_apple_note failed: %s", e)
+        return {"success": False, "error": APPLE_JXA_USER_MESSAGE}
+
+
+async def _create_apple_note_impl(args: dict) -> Any:
+    from app.sync.apple_notes import create_note
+    title = (args.get("title") or "").strip() or "新备忘录"
+    body = (args.get("body") or "")
+    folder = (args.get("folder") or "")
+    result = await create_note(title=title, body=body, folder=folder)
+    out = {"success": True, "message": "已在「备忘录」中创建", "result": result}
+    if args.get("add_to_knowledge_base", True):
+        try:
+            from app.sync.ingest_pipeline import ingest_entity
+            await ingest_entity(
+                title=title, content=body or f"[由 Agent 在 Apple 备忘录创建]",
+                source="agent_apple_notes", created_by="agent", skip_llm=True,
+            )
+            out["knowledge_base"] = "已记入第二大脑知识库"
+        except Exception as e:
+            logger.warning("Agent create_apple_note: ingest failed %s", e)
+    return out
+
+
+async def _create_apple_reminder(args: dict) -> Any:
+    try:
+        return await _create_apple_reminder_impl(args)
+    except Exception as e:
+        logger.exception("create_apple_reminder failed: %s", e)
+        return {"success": False, "error": APPLE_JXA_USER_MESSAGE}
+
+
+async def _create_apple_reminder_impl(args: dict) -> Any:
+    from app.sync.apple_reminders import create_reminder
+    title = (args.get("title") or "").strip() or "新提醒"
+    body = (args.get("body") or "")
+    due = (args.get("due_date") or "")
+    result = await create_reminder(
+        title=title, body=body,
+        list_name=(args.get("list_name") or ""),
+        due_date=due, priority=int(args.get("priority") or 0),
+    )
+    out = {"success": True, "message": "已在「提醒事项」中创建", "result": result}
+    if args.get("add_to_knowledge_base", True):
+        try:
+            from app.sync.ingest_pipeline import ingest_entity
+            content = body or f"截止: {due}" if due else "[由 Agent 在 Apple 提醒事项创建]"
+            await ingest_entity(
+                title=title, content=content, source="agent_apple_reminders",
+                created_by="agent", skip_llm=True,
+            )
+            out["knowledge_base"] = "已记入第二大脑知识库"
+        except Exception as e:
+            logger.warning("Agent create_apple_reminder: ingest failed %s", e)
+    return out
+
+
+async def _create_apple_event(args: dict) -> Any:
+    title = (args.get("title") or "").strip() or "新事件"
+    start = (args.get("start_date") or "").strip()
+    end = (args.get("end_date") or "").strip()
+    if not start or not end:
+        return {"success": False, "error": "start_date 和 end_date 必填，请使用 ISO 格式如 2026-02-20T09:00:00。用户说「今天」时请先调用 get_current_datetime。"}
+    if start.startswith("2023") or (start.startswith("2024") and start < "2025-01-01"):
+        return {"success": False, "error": "start_date 不能使用过往年份。请先调用 get_current_datetime 获取当前日期后再计算 start_date/end_date。"}
+    try:
+        return await _create_apple_event_impl(args, title, start, end)
+    except Exception as e:
+        logger.exception("create_apple_event failed: %s", e)
+        return {"success": False, "error": APPLE_JXA_USER_MESSAGE}
+
+
+async def _create_apple_event_impl(args: dict, title: str, start: str, end: str) -> Any:
+    from app.sync.apple_calendar import create_event
+    desc = (args.get("description") or "")
+    loc = (args.get("location") or "")
+    result = await create_event(
+        title=title, start_date=start, end_date=end,
+        description=desc, location=loc, calendar=(args.get("calendar") or ""),
+        all_day=bool(args.get("all_day")),
+    )
+    out = {"success": True, "message": "已在「日历」中创建", "result": result}
+    if args.get("add_to_knowledge_base", True):
+        try:
+            from app.sync.ingest_pipeline import ingest_entity
+            content = f"{start} ~ {end}"
+            if desc:
+                content += f"\n\n{desc}"
+            if loc:
+                content += f"\n地点: {loc}"
+            await ingest_entity(
+                title=title, content=content, source="agent_apple_calendar",
+                created_by="agent", skip_llm=True,
+            )
+            out["knowledge_base"] = "已记入第二大脑知识库"
+        except Exception as e:
+            logger.warning("Agent create_apple_event: ingest failed %s", e)
+    return out
+
+
 _HANDLERS = {
     "search_knowledge": _search_knowledge,
     "get_entity_detail": _get_entity_detail,
@@ -404,4 +713,9 @@ _HANDLERS = {
     "update_entity_tags": _update_entity_tags,
     "summarize_content": _summarize_content,
     "get_statistics": _get_statistics,
+    "get_current_datetime": _get_current_datetime,
+    "fetch_apple_data": _fetch_apple_data,
+    "create_apple_note": _create_apple_note,
+    "create_apple_reminder": _create_apple_reminder,
+    "create_apple_event": _create_apple_event,
 }

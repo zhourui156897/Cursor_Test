@@ -28,18 +28,28 @@ export function setApiSettings(s: PluginSettings) {
   _settings = s;
 }
 
+function baseUrl(): string {
+  return _settings.apiUrl.replace(/\/+$/, "");
+}
+
+async function rawPost<T>(path: string, body: unknown): Promise<T> {
+  const resp = await requestUrl({
+    url: `${baseUrl()}${path}`,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return resp.json as T;
+}
+
 async function ensureToken(): Promise<string> {
   if (_settings.token) return _settings.token;
-  const resp = await api.post("/api/auth/login", {
+  const resp = await rawPost<{ access_token: string }>("/api/auth/login", {
     username: _settings.username,
     password: _settings.password,
   });
   _settings.token = resp.access_token;
   return _settings.token;
-}
-
-function baseUrl(): string {
-  return _settings.apiUrl.replace(/\/+$/, "");
 }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {

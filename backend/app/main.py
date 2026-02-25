@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -24,8 +25,30 @@ async def lifespan(app: FastAPI):
         import logging
         logging.getLogger(__name__).warning("Milvus not available at startup: %s", e)
 
+    # 定时同步：若开启则按间隔执行（使用已持久化的 sync_scope）
+    _scheduler: object | None = None
+    try:
+        from app.config import get_user_config
+        from app.sync.scheduler import run_scheduled_sync
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+        cfg = get_user_config().get("apple_sync", {})
+        if cfg.get("auto_sync") and cfg.get("interval_minutes", 0) > 0:
+            interval = max(1, int(cfg["interval_minutes"]))
+            _scheduler = AsyncIOScheduler(event_loop=asyncio.get_running_loop())
+            _scheduler.add_job(run_scheduled_sync, "interval", minutes=interval, id="apple_sync")
+            _scheduler.start()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Scheduled sync not started: %s", e)
+
     yield
 
+    if _scheduler is not None:
+        try:
+            _scheduler.shutdown(wait=False)
+        except Exception:
+            pass
     from app.services.llm_service import close_client
     from app.storage.milvus_client import close_milvus
     from app.storage.neo4j_client import close_neo4j

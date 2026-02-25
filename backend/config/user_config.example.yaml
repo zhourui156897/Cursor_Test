@@ -4,6 +4,21 @@
 # cp user_config.example.yaml user_config.yaml
 # ============================================
 
+# --- LLM（聊天/ RAG 必配，否则会提示「LLM 服务不可用」）---
+# 方式一：OpenAI（推荐）
+# llm:
+#   api_url: "https://api.openai.com/v1"
+#   api_key: "sk-xxxxxxxx"   # 在 Settings 页面也可填写，会写回本文件
+#   model: "gpt-4o"
+#   embedding_model: "text-embedding-3-small"
+#   embedding_dim: 1536
+#
+# 方式二：本地 Ollama（需先启动 Ollama，且拉取对应模型）
+# llm:
+#   api_url: "http://localhost:11434/v1"
+#   api_key: ""              # Ollama 一般不需要
+#   model: "qwen2.5"
+
 # --- Obsidian ---
 obsidian:
   sync_interval_minutes: 10

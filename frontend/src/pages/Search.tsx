@@ -7,16 +7,27 @@ export default function Search() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const doSearch = async () => {
-    if (!query.trim()) return;
+    const q = query.trim();
+    if (!q) return;
     setLoading(true);
+    setError(null);
+    setMessage(null);
+    setSearched(false);
     try {
-      const resp = await searchApi.search(query);
-      setResults(resp.results);
+      const resp = await searchApi.search(q);
+      const list = Array.isArray(resp?.results) ? resp.results : [];
+      setResults(list);
+      setMessage(resp?.message ?? null);
       setSearched(true);
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '搜索请求失败';
+      setError(msg);
       setResults([]);
+      setSearched(true);
     } finally {
       setLoading(false);
     }
@@ -46,14 +57,31 @@ export default function Search() {
         </button>
       </div>
 
-      {searched && results.length === 0 && (
+      {loading && (
+        <div className="text-center py-8 text-blue-600">搜索中…</div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 mb-4">
+          {error}
+          <span className="text-sm block mt-1">可检查：1) 后端是否运行 2) 设置中 LLM 是否已连接（语义搜索需要）3) 是否有已审核并向量化的实体</span>
+        </div>
+      )}
+
+      {message && !error && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 text-blue-800 px-4 py-3 mb-4 text-sm">
+          {message}
+        </div>
+      )}
+
+      {searched && !loading && results.length === 0 && !error && (
         <div className="text-center py-12 text-gray-500">
-          未找到相关内容，请尝试其他关键词
+          未找到相关内容，请尝试其他关键词。若从未做过「同步」或「审核通过」，知识库可能为空。
         </div>
       )}
 
       <div className="space-y-4">
-        {results.map((r, i) => (
+        {Array.isArray(results) && results.map((r, i) => (
           <div key={r.entity_id + i} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div className="flex-1">

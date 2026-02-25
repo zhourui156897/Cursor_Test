@@ -89,24 +89,58 @@ export const entityApi = {
 
 // Review Queue
 export const reviewApi = {
+  list: (status = 'all', page = 1) =>
+    api.get<ReviewListResponse>(`/review/list?status=${status}&page=${page}`),
   listPending: (page = 1) => api.get<ReviewItem[]>(`/review/pending?page=${page}`),
   getCount: () => api.get<{ count: number }>('/review/count'),
+  getStats: () => api.get<ReviewStats>('/review/stats'),
   approve: (id: string, modifications?: Record<string, unknown>) =>
     api.post(`/review/${id}/approve`, { modifications: modifications || null }),
   reject: (id: string, reason = '') => api.post(`/review/${id}/reject`, { reason }),
+  manualTag: (id: string, tags: { folder_tags: string[]; content_tags: string[]; status: Record<string, string> }) =>
+    api.post(`/review/${id}/manual-tag`, tags),
   batchApprove: (ids: string[]) => api.post('/review/batch-approve', { review_ids: ids }),
 };
 
 // Sync
+export interface SyncTriggerOptions {
+  limit?: number;
+  order?: 'newest' | 'oldest';
+  folder_whitelist?: string[];
+  days_back?: number;
+  days_forward?: number;
+  list_names?: string[];
+  due_after?: string;
+  due_before?: string;
+}
+
 export const syncApi = {
   getStatus: () => api.get<SyncStatus>('/sync/status'),
-  trigger: (source: string) => api.post<SyncResult>(`/sync/trigger/${source}`, {}),
-  triggerAll: () => api.post<{ results: Record<string, unknown> }>('/sync/trigger-all', {}),
+  getNoteFolders: () => api.get<{ folders: string[] }>('/sync/apple/note-folders'),
+  getReminderLists: () => api.get<{ lists: string[] }>('/sync/apple/reminder-lists'),
+  trigger: (source: string, limit = 20, order = 'newest', options: SyncTriggerOptions = {}) => {
+    const p = new URLSearchParams({ limit: String(limit), order });
+    if (options.folder_whitelist?.length) p.set('folder_whitelist', options.folder_whitelist.join(','));
+    if (options.days_back != null) p.set('days_back', String(options.days_back));
+    if (options.days_forward != null) p.set('days_forward', String(options.days_forward));
+    if (options.list_names?.length) p.set('list_names', options.list_names.join(','));
+    if (options.due_after) p.set('due_after', options.due_after);
+    if (options.due_before) p.set('due_before', options.due_before);
+    return api.post<SyncResult>(`/sync/trigger/${source}?${p}`, {});
+  },
+  triggerAll: (limit = 20, order = 'newest') =>
+    api.post<{ results: Record<string, unknown> }>(`/sync/trigger-all?limit=${limit}&order=${order}`, {}),
   upload: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
     return api.upload<{ id: string; status: string; title: string }>('/sync/upload', fd);
   },
+  createNote: (data: { title: string; body?: string; folder?: string }) =>
+    api.post('/sync/create/note', data),
+  createReminder: (data: { title: string; body?: string; list_name?: string; due_date?: string; priority?: number }) =>
+    api.post('/sync/create/reminder', data),
+  createEvent: (data: { title: string; start_date: string; end_date: string; description?: string; location?: string; calendar?: string; all_day?: boolean }) =>
+    api.post('/sync/create/event', data),
   updateConfig: (config: Record<string, unknown>) => api.put('/sync/config', config),
 };
 
@@ -210,6 +244,7 @@ export interface SearchResponse {
   query: string;
   results: SearchResult[];
   total: number;
+  message?: string;
 }
 export interface SearchResult {
   entity_id: string;
@@ -220,7 +255,7 @@ export interface SearchResult {
   distance: number | null;
   match_type: string;
 }
-export interface GraphStats { available: boolean; node_count: number; relationship_count: number }
+export interface GraphStats { available: boolean; node_count: number; relationship_count: number; error?: string }
 export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[] }
 export interface GraphNode { id: string; title: string; source: string; labels: string[] }
 export interface GraphEdge { source: string; target: string; type: string }
@@ -241,8 +276,25 @@ export interface ReviewItem {
   suggested_content_tags: string[] | null;
   suggested_status: Record<string, string> | null;
   confidence_scores: Record<string, unknown> | null;
+  reviewer_action: Record<string, unknown> | null;
   status: string;
   created_at: string | null;
+  reviewed_at: string | null;
+}
+
+export interface ReviewListResponse {
+  items: ReviewItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ReviewStats {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  modified: number;
 }
 
 export interface SyncStatus {
