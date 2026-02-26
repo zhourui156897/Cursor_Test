@@ -1,7 +1,7 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Brain, Tags, FileText, Users, LayoutDashboard, Download, ClipboardCheck, Settings, Search, Share2, MessageSquare } from 'lucide-react';
-import { reviewApi } from '../api/client';
+import { Brain, Tags, FileText, Users, LayoutDashboard, Download, ClipboardCheck, Settings, Search, Share2, MessageSquare, ArrowUpCircle } from 'lucide-react';
+import { reviewApi, versionApi } from '../api/client';
 
 const NAV_ITEMS = [
   { path: '/', label: '仪表盘', icon: LayoutDashboard },
@@ -18,13 +18,24 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [reviewCount, setReviewCount] = useState(0);
+  const [version, setVersion] = useState('');
+  const [hasUpdate, setHasUpdate] = useState(false);
 
   useEffect(() => {
     reviewApi.getCount().then(r => setReviewCount(r.count)).catch(() => {});
     const interval = setInterval(() => {
       reviewApi.getCount().then(r => setReviewCount(r.count)).catch(() => {});
     }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    versionApi.getVersion().then(r => setVersion(r.version)).catch(() => {});
+    const check = () => versionApi.checkUpdate().then(r => setHasUpdate(r.has_update)).catch(() => {});
+    check();
+    const interval = setInterval(check, 10 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -57,8 +68,17 @@ export default function Layout() {
             );
           })}
         </nav>
-        <div className="px-4 py-3 border-t border-gray-700 text-xs text-gray-500">
-          v0.3.0
+        <div
+          className={`px-4 py-3 border-t border-gray-700 text-xs flex items-center gap-2 ${hasUpdate ? 'text-amber-400 cursor-pointer hover:text-amber-300' : 'text-gray-500'}`}
+          onClick={() => hasUpdate && navigate('/settings?tab=version')}
+        >
+          <span>v{version || '...'}</span>
+          {hasUpdate && (
+            <>
+              <ArrowUpCircle className="w-3.5 h-3.5" />
+              <span>有新版本</span>
+            </>
+          )}
         </div>
       </aside>
       <main className="flex-1 overflow-auto p-6">

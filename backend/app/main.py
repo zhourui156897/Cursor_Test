@@ -58,10 +58,12 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
+from app.api.version import get_local_version
+
 app = FastAPI(
     title="第二大脑 - dierdanao",
     description="人生价值系统 API",
-    version="0.2.0",
+    version=get_local_version(),
     lifespan=lifespan,
 )
 
@@ -80,7 +82,7 @@ async def health_check():
     from app.storage.neo4j_client import get_graph_stats
     return {
         "status": "ok",
-        "version": "0.2.0",
+        "version": get_local_version(),
         "milvus": await get_collection_stats(),
         "neo4j": await get_graph_stats(),
     }
@@ -121,6 +123,7 @@ from app.api import graph as graph_router
 from app.api import chat as chat_router
 from app.api import history as history_router
 from app.api import settings_api as settings_router
+from app.api import version as version_router
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["认证"])
 app.include_router(tags_router.router, prefix="/api/tags", tags=["标签"])
@@ -133,3 +136,4 @@ app.include_router(graph_router.router, prefix="/api/graph", tags=["图谱"])
 app.include_router(chat_router.router, prefix="/api/chat", tags=["对话"])
 app.include_router(history_router.router, prefix="/api/history", tags=["历史"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["设置"])
+app.include_router(version_router.router, prefix="/api/version", tags=["版本"])

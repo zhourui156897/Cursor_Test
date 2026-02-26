@@ -13,6 +13,7 @@ from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.user import UserOut
 from app.config import get_settings, get_user_config
 from app.services.llm_service import check_available
+from app.api.version import get_local_version
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ async def get_system_info(_: Annotated[UserOut, Depends(get_current_user)]):
         conv_count = 0
 
     return {
-        "version": "0.3.0",
+        "version": get_local_version(),
         "phase": "Phase 3 完成 / Phase 4 进行中",
         "auth_mode": settings.auth_mode,
         "vector_db_mode": settings.vector_db_mode,

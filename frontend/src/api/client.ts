@@ -185,6 +185,18 @@ export const historyApi = {
   timeline: (entityId: string) => api.get<TimelineItem[]>(`/history/${entityId}/timeline`),
 };
 
+// Version
+export const versionApi = {
+  get: () => api.get<VersionInfo>('/version'),
+  check: () => api.get<UpdateCheck>('/version/check'),
+};
+
+// Version
+export const versionApi = {
+  getVersion: () => api.get<VersionInfo>('/version'),
+  checkUpdate: () => api.get<UpdateCheck>('/version/check'),
+};
+
 // Settings
 export const settingsApi = {
   getLLM: () => api.get<LLMConfigResponse>('/settings/llm'),
@@ -238,6 +250,19 @@ export interface SystemInfo {
     milvus_vectors: number;
     neo4j_nodes: number;
   };
+}
+
+export interface VersionInfo { version: string }
+export interface UpdateCheck { local: string; remote: string; has_update: boolean; error: string | null }
+
+export interface VersionInfo {
+  version: string;
+}
+export interface UpdateCheck {
+  local: string;
+  remote: string;
+  has_update: boolean;
+  error: string | null;
 }
 
 export interface SearchResponse {

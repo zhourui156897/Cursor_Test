@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
-import { syncApi, settingsApi, type SyncStatus, type LLMConfigResponse, type SystemInfo } from '../api/client';
-import { Settings as SettingsIcon, Save, Cpu, FolderOpen, RefreshCw, Eye, EyeOff, CheckCircle2, XCircle, Database, Brain } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { syncApi, settingsApi, versionApi, type SyncStatus, type LLMConfigResponse, type SystemInfo, type UpdateCheck } from '../api/client';
+import { Settings as SettingsIcon, Save, Cpu, FolderOpen, RefreshCw, Eye, EyeOff, CheckCircle2, XCircle, Database, Brain, ArrowUpCircle } from 'lucide-react';
 
-type TabKey = 'llm' | 'sync' | 'paths' | 'system';
+type TabKey = 'llm' | 'sync' | 'paths' | 'system' | 'version';
 
 export default function Settings() {
-  const [tab, setTab] = useState<TabKey>('llm');
+  const [searchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as TabKey) || 'llm';
+  const [tab, setTab] = useState<TabKey>(initialTab);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -19,6 +22,7 @@ export default function Settings() {
           { key: 'sync' as TabKey, label: 'Apple 同步', icon: RefreshCw },
           { key: 'paths' as TabKey, label: '路径配置', icon: FolderOpen },
           { key: 'system' as TabKey, label: '系统信息', icon: Database },
+          { key: 'version' as TabKey, label: '版本更新', icon: ArrowUpCircle },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -36,6 +40,7 @@ export default function Settings() {
       {tab === 'sync' && <SyncTab />}
       {tab === 'paths' && <PathsTab />}
       {tab === 'system' && <SystemTab />}
+      {tab === 'version' && <VersionTab />}
     </div>
   );
 }
@@ -482,6 +487,87 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="flex justify-between py-1.5 border-b border-gray-50">
       <span className="text-gray-500">{label}</span>
       <span className="font-semibold text-gray-800">{value}</span>
+    </div>
+  );
+}
+
+/* ===== 版本更新 ===== */
+
+function VersionTab() {
+  const [info, setInfo] = useState<UpdateCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const check = useCallback(async () => {
+    setChecking(true);
+    try {
+      setInfo(await versionApi.checkUpdate());
+    } catch { /* ignore */ }
+    setChecking(false);
+  }, []);
+
+  useEffect(() => { check(); }, [check]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold text-gray-800">版本信息</h2>
+        <button onClick={check} disabled={checking}
+          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800">
+          <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} /> 检查更新
+        </button>
+      </div>
+
+      {info && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <Card title="当前版本">
+              <span className="text-2xl font-bold text-gray-800 font-mono">v{info.local}</span>
+            </Card>
+            <Card title="最新版本">
+              <span className={`text-2xl font-bold font-mono ${info.has_update ? 'text-amber-600' : 'text-green-600'}`}>
+                v{info.remote}
+              </span>
+            </Card>
+          </div>
+
+          {info.has_update ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowUpCircle className="w-5 h-5 text-amber-600" />
+                <span className="font-semibold text-amber-800">发现新版本 v{info.remote}</span>
+              </div>
+              <p className="text-sm text-amber-700 mb-3">
+                请在终端执行以下命令更新：
+              </p>
+              <div className="bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm">
+                <p>cd ~/dierdanao</p>
+                <p>bash update.sh</p>
+              </div>
+              <p className="text-xs text-amber-600 mt-3">
+                更新完成后需要重启服务（先 bash stop.sh，再 bash start.sh）
+              </p>
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-5 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-500" />
+              <span className="text-green-800 font-medium">已是最新版本</span>
+            </div>
+          )}
+
+          {info.error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+              检查更新失败：{info.error}
+            </div>
+          )}
+        </>
+      )}
+
+      {!info && !checking && (
+        <div className="text-gray-400 text-center py-8">无法获取版本信息</div>
+      )}
+      {!info && checking && (
+        <div className="text-gray-400 text-center py-8">正在检查...</div>
+      )}
     </div>
   );
 }

@@ -31,5 +31,8 @@ uploads/
 *.swo
 .DS_Store
 
+# Logs
+logs/
+
 # Docker
 docker-volumes/
