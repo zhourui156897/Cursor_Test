@@ -33,6 +33,8 @@ async def search(
     q: str = Query(..., min_length=1, description="搜索查询"),
     top_k: int = Query(default=10, ge=1, le=50),
     source: str | None = Query(default=None, description="按来源过滤"),
+    folder: str | None = Query(default=None, description="按文件夹标签过滤"),
+    tag: str | None = Query(default=None, description="按内容标签过滤"),
     mode: str = Query(default="hybrid", description="搜索模式: vector/metadata/hybrid"),
 ):
     """Hybrid semantic search across all data stores."""
@@ -41,7 +43,10 @@ async def search(
 
     if mode in ("vector", "hybrid"):
         try:
-            vector_hits = await semantic_search(q, top_k=top_k, source_filter=source)
+            vector_hits = await semantic_search(
+                q, top_k=top_k, source_filter=source,
+                folder_filter=folder, tag_filter=tag,
+            )
         except Exception:
             vector_hits = []
             message = (

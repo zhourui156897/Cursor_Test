@@ -146,9 +146,11 @@ export const syncApi = {
 
 // Search
 export const searchApi = {
-  search: (q: string, topK = 10, source?: string, mode = 'hybrid') => {
+  search: (q: string, topK = 10, source?: string, mode = 'hybrid', folder?: string, tag?: string) => {
     const p = new URLSearchParams({ q, top_k: String(topK), mode });
     if (source) p.set('source', source);
+    if (folder) p.set('folder', folder);
+    if (tag) p.set('tag', tag);
     return api.get<SearchResponse>(`/search?${p}`);
   },
 };
@@ -187,12 +189,6 @@ export const historyApi = {
 
 // Version
 export const versionApi = {
-  get: () => api.get<VersionInfo>('/version'),
-  check: () => api.get<UpdateCheck>('/version/check'),
-};
-
-// Version
-export const versionApi = {
   getVersion: () => api.get<VersionInfo>('/version'),
   checkUpdate: () => api.get<UpdateCheck>('/version/check'),
 };
@@ -204,6 +200,7 @@ export const settingsApi = {
   getPaths: () => api.get<PathsConfigResponse>('/settings/paths'),
   updatePaths: (data: PathsConfigUpdate) => api.put<{ message: string }>('/settings/paths', data),
   getSystemInfo: () => api.get<SystemInfo>('/settings/system-info'),
+  reVectorize: () => api.post<ReVectorizeResult>('/settings/re-vectorize', {}),
 };
 
 // Types
@@ -251,6 +248,8 @@ export interface SystemInfo {
     neo4j_nodes: number;
   };
 }
+
+export interface ReVectorizeResult { total: number; success: number; failed: number; message?: string }
 
 export interface VersionInfo { version: string }
 export interface UpdateCheck { local: string; remote: string; has_update: boolean; error: string | null }

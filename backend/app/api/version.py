@@ -25,6 +25,14 @@ def get_local_version() -> str:
         return "unknown"
 
 
+def _parse_semver(version: str) -> tuple[int, ...]:
+    """将版本字符串解析为可比较的 tuple，如 '0.5.0' -> (0, 5, 0)。"""
+    try:
+        return tuple(int(x) for x in version.strip().split("."))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
 @router.get("")
 async def version():
     """返回本地版本号。"""
@@ -33,9 +41,9 @@ async def version():
 
 @router.get("/check")
 async def check_update():
-    """对比本地版本与 GitHub main 分支上的 VERSION，判断是否有更新。"""
+    """对比本地版本与 GitHub main 分支上的 VERSION，仅当远程版本更高时提示更新。"""
     local = get_local_version()
-    remote = local  # 默认与本地相同
+    remote = local
     has_update = False
     error: str | None = None
 
@@ -44,7 +52,7 @@ async def check_update():
             resp = await client.get(_GITHUB_RAW_URL)
             if resp.status_code == 200:
                 remote = resp.text.strip()
-                has_update = remote != local
+                has_update = _parse_semver(remote) > _parse_semver(local)
             else:
                 error = f"GitHub 返回 {resp.status_code}"
     except Exception as e:

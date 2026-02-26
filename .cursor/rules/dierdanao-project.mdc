@@ -90,6 +90,19 @@ docker compose up -d
 - 内容标签: 学习/反思/研究/资料/问题/想法/笔记/待思考/复盘/已完成/整理
 - 状态维度: 优先级(P0-P3), 阶段(想法/进行中/已完成/归档)
 
+## 版本管理与发布流程（每次维护必须遵守）
+- **版本源**: 项目根目录 `VERSION` 文件为唯一版本号来源，后端通过 `get_local_version()` 读取
+- **版本号规则**: 语义化版本 MAJOR.MINOR.PATCH — bug修复改PATCH, 新功能改MINOR, 不兼容改动改MAJOR
+- **每次完成功能/修复后，必须**:
+  1. 更新 `VERSION` 文件中的版本号
+  2. 如有新增 pip 依赖，执行 `pip freeze --exclude-editable > requirements.txt`
+  3. 如有新增 npm 依赖，确保 `package-lock.json` 一起提交
+  4. 提交并推送到 GitHub (`git push origin main`)
+- **用户端更新**: 用户执行 `bash update.sh` + 重启即可，不要求用户做任何额外手动操作
+- **向后兼容**: 数据库结构变更须在启动时自动迁移；配置文件变更须给默认值兼容旧版
+- **一键脚本**: `install.sh`(安装) / `start.sh`(启动) / `stop.sh`(停止) / `update.sh`(更新)
+- **相关文档**: `docs/版本更新流程.md`(开发者参考) / `docs/安装部署详细教程.md`(用户教程) / `docs/在另一台Mac上完整安装.md`(极简版)
+
 ## 编码规范
 - 后端用中文注释和 docstring
 - 前端页面中文 UI

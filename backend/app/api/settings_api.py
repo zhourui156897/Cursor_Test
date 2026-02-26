@@ -188,7 +188,7 @@ async def get_system_info(_: Annotated[UserOut, Depends(get_current_user)]):
 
     return {
         "version": get_local_version(),
-        "phase": "Phase 3 完成 / Phase 4 进行中",
+        "phase": "Phase 4 完成 / 向量化全链路优化",
         "auth_mode": settings.auth_mode,
         "vector_db_mode": settings.vector_db_mode,
         "services": {
@@ -204,6 +204,14 @@ async def get_system_info(_: Annotated[UserOut, Depends(get_current_user)]):
             "neo4j_nodes": neo4j_stats.get("node_count", 0),
         },
     }
+
+
+@router.post("/re-vectorize")
+async def re_vectorize(_: Annotated[UserOut, Depends(get_admin_user)]):
+    """补录所有已审核但未向量化的实体到 Milvus。"""
+    from app.services.embedding_service import re_embed_all_pending
+    result = await re_embed_all_pending()
+    return result
 
 
 def _reload_settings(llm_cfg: dict):

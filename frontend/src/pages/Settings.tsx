@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { syncApi, settingsApi, versionApi, type SyncStatus, type LLMConfigResponse, type SystemInfo, type UpdateCheck } from '../api/client';
-import { Settings as SettingsIcon, Save, Cpu, FolderOpen, RefreshCw, Eye, EyeOff, CheckCircle2, XCircle, Database, Brain, ArrowUpCircle } from 'lucide-react';
+import { syncApi, settingsApi, versionApi, type SyncStatus, type LLMConfigResponse, type SystemInfo, type UpdateCheck, type ReVectorizeResult } from '../api/client';
+import { Settings as SettingsIcon, Save, Cpu, FolderOpen, RefreshCw, Eye, EyeOff, CheckCircle2, XCircle, Database, Brain, ArrowUpCircle, Zap } from 'lucide-react';
 
 type TabKey = 'llm' | 'sync' | 'paths' | 'system' | 'version';
 
@@ -382,6 +382,8 @@ function PathsTab() {
 function SystemTab() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reVecLoading, setReVecLoading] = useState(false);
+  const [reVecResult, setReVecResult] = useState<ReVectorizeResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -390,6 +392,19 @@ function SystemTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleReVectorize = async () => {
+    setReVecLoading(true);
+    setReVecResult(null);
+    try {
+      const result = await settingsApi.reVectorize();
+      setReVecResult(result);
+      await load();
+    } catch (e: unknown) {
+      setReVecResult({ total: 0, success: 0, failed: 0, message: e instanceof Error ? e.message : '操作失败' });
+    }
+    setReVecLoading(false);
+  };
 
   if (!info) return <div className="text-gray-400">加载中...</div>;
 
@@ -421,6 +436,24 @@ function SystemTab() {
           <Stat label="待审核" value={info.data.pending_reviews} />
           <Stat label="对话数" value={info.data.conversations} />
           <Stat label="向量数" value={info.data.milvus_vectors} />
+        </div>
+      </Card>
+
+      <Card title="向量化管理" desc="补录已审核但未向量化的实体到 Milvus，修复向量缺失问题">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleReVectorize}
+            disabled={reVecLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-sm font-medium"
+          >
+            <Zap className={`w-4 h-4 ${reVecLoading ? 'animate-pulse' : ''}`} />
+            {reVecLoading ? '向量化中...' : '重新向量化'}
+          </button>
+          {reVecResult && (
+            <span className={`text-sm ${reVecResult.failed > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+              {reVecResult.message || `完成: 共 ${reVecResult.total} 个, 成功 ${reVecResult.success}, 失败 ${reVecResult.failed}`}
+            </span>
+          )}
         </div>
       </Card>
 

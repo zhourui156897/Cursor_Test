@@ -190,18 +190,33 @@ async def approve_item(review_id: str, modifications: dict | None = None) -> dic
         except Exception as e:
             logger.warning("Failed to update Obsidian note for entity %s: %s", entity_id, e)
 
-    # Trigger async vectorization + knowledge graph extraction
+    # 向量化 + 知识图谱抽取（分开 try/except，互不干扰）
+    embed_ok = False
+    extract_status = "skipped"
+
     try:
         from app.services.embedding_service import embed_entity
-        from app.services.entity_extractor import extract_and_store
         embed_ok = await embed_entity(entity_id)
-        extract_result = await extract_and_store(entity_id)
-        logger.info(
-            "Post-approval pipeline for %s: embed=%s, extract=%s",
-            entity_id, embed_ok, extract_result.get("status"),
-        )
+        if not embed_ok:
+            logger.error("向量化失败: entity %s (embed_entity 返回 False)", entity_id)
     except Exception as e:
-        logger.warning("Post-approval pipeline error for entity %s: %s", entity_id, e)
+        logger.error("向量化异常: entity %s: %s", entity_id, e, exc_info=True)
+
+    try:
+        from app.services.entity_extractor import extract_and_store
+        extract_result = await extract_and_store(entity_id)
+        extract_status = extract_result.get("status", "unknown")
+    except Exception as e:
+        logger.error("知识图谱抽取异常: entity %s: %s", entity_id, e, exc_info=True)
+        extract_status = "error"
+
+    logger.info(
+        "审核后处理 %s: embed=%s, extract=%s",
+        entity_id, embed_ok, extract_status,
+    )
+
+    action["embed_status"] = "ok" if embed_ok else "failed"
+    action["extract_status"] = extract_status
 
     logger.info("Approved review %s (status: %s) for entity %s", review_id, status, entity_id)
     return action

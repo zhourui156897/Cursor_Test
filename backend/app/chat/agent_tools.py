@@ -22,12 +22,14 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_knowledge",
-            "description": "在知识库中搜索相关内容，支持语义搜索和关键词搜索",
+            "description": "在知识库中搜索相关内容，支持语义向量搜索和关键词搜索。可按文件夹标签或内容标签过滤，缩小搜索范围。当用户问知识相关问题时，优先使用本工具。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "搜索查询内容"},
                     "top_k": {"type": "integer", "description": "返回结果数量", "default": 5},
+                    "folder_tag": {"type": "string", "description": "按文件夹标签过滤（如 '领域/技术'、'项目/创业'）"},
+                    "content_tag": {"type": "string", "description": "按内容标签过滤（如 '学习'、'研究'、'想法'）"},
                 },
                 "required": ["query"],
             },
@@ -273,10 +275,16 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
 async def _search_knowledge(args: dict) -> Any:
     query = args["query"]
     top_k = args.get("top_k", 5)
+    folder_tag = args.get("folder_tag")
+    content_tag = args.get("content_tag")
 
     results = []
     try:
-        vector_hits = await semantic_search(query, top_k=top_k)
+        vector_hits = await semantic_search(
+            query, top_k=top_k,
+            folder_filter=folder_tag,
+            tag_filter=content_tag,
+        )
         results.extend(vector_hits)
     except Exception:
         pass
